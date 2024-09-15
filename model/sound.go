@@ -12,14 +12,11 @@ import (
 )
 
 type OpusFrame []byte
-type OpusSound struct {
-	B []OpusFrame
-}
+type OpusSound []OpusFrame
 
 func LoadSound(path string) (sound OpusSound, err error) {
 	file, err := os.Open(path)
 	if err != nil {
-		fmt.Println("ooooyy")
 		return OpusSound{}, err
 	}
 	defer file.Close()
@@ -35,18 +32,15 @@ func LoadSound(path string) (sound OpusSound, err error) {
 			return sound, fmt.Errorf("error when reading header: %v", err)
 		}
 
-		// read opus decoded data
-		fmt.Printf("page %v, size : %v\n", i, opusLen)
 		opusBuf := make([]byte, opusLen)
 		if err = binary.Read(file, binary.LittleEndian, &opusBuf); err != nil {
 			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
-				fmt.Println("ooooo")
 				return sound, nil
 			}
 			return sound, fmt.Errorf("error when reading opus data: %v", err)
 		}
 
-		sound.B = append(sound.B, opusBuf)
+		sound = append(sound, opusBuf)
 		i++
 	}
 }
@@ -58,11 +52,24 @@ func (opus OpusSound) PlaySound(s *discordgo.Session, guildID, channelID string,
 		return err
 	}
 	defer vc.Disconnect()
-	fmt.Println("connected")
 	vc.Speaking(true)
 	time.Sleep(200 * time.Millisecond)
 
-	for _, audioData := range opus.B {
+	for _, audioData := range opus {
+		vc.OpusSend <- audioData
+	}
+
+	time.Sleep(200 * time.Millisecond)
+	vc.Speaking(false)
+
+	return nil
+}
+
+func (opus OpusSound) PlaySoundToVC(vc *discordgo.VoiceConnection) error {
+	vc.Speaking(true)
+	time.Sleep(200 * time.Millisecond)
+
+	for _, audioData := range opus {
 		vc.OpusSend <- audioData
 	}
 
