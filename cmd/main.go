@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"strings"
 	"syscall"
 
 	"github.com/ARF-DEV/caffeine_adct_bot/config"
@@ -33,80 +32,14 @@ func main() {
 		panic(err)
 	}
 
-	bot, err := discordgo.New("Bot " + config.DiscordAppKey)
+	bot, err := model.NewDisBot(config)
 	if err != nil {
 		panic(err)
 	}
-	bot.Identify.Intents = discordgo.IntentGuilds | discordgo.IntentGuildMessages | discordgo.IntentGuildVoiceStates
-
 	bot.Open()
 	defer bot.Close()
-
-	sound, err := model.LoadSound("airhorn.dca")
-	if err != nil {
-		panic(err)
-	}
-	bot.AddHandler(func(s *discordgo.Session, ready *discordgo.Ready) {
-		s.UpdateGameStatus(0, "ooyyy")
-	})
-	msp := model.NewMusicPlayer()
-	bot.AddHandler(func(s *discordgo.Session, msg *discordgo.MessageCreate) {
-		if msg.Author.ID == bot.State.User.ID {
-			return
-		}
-
-		if msg.Content == "wassup" {
-			s.ChannelMessageSendComplex(msg.ChannelID, &discordgo.MessageSend{
-				Content: fmt.Sprintf("wassup <@%s>", msg.Author.ID),
-				AllowedMentions: &discordgo.MessageAllowedMentions{
-					Parse: []discordgo.AllowedMentionType{discordgo.AllowedMentionTypeUsers},
-				},
-			})
-		}
-		if msg.Content == "!airhorn" {
-			s.ChannelMessageSendComplex(msg.ChannelID, &discordgo.MessageSend{
-				Content: fmt.Sprintf("okayy <@%s>", msg.Author.ID),
-				AllowedMentions: &discordgo.MessageAllowedMentions{
-					Parse: []discordgo.AllowedMentionType{discordgo.AllowedMentionTypeUsers},
-				},
-			})
-
-			c, err := s.State.Channel(msg.ChannelID)
-			if err != nil {
-				log.Println("Error when finding channel: ", err)
-			}
-			g, err := s.State.Guild(c.GuildID)
-			if err != nil {
-				log.Println("Error when finding guildID: ", err)
-			}
-
-			if err = sound.PlaySound(s, g.ID, c.ID, 320); err != nil {
-				log.Printf("Error on playSound(): %v", err)
-			}
-		}
-
-		if msg.Content == "play" {
-			vc, err := s.ChannelVoiceJoin(msg.GuildID, msg.ChannelID, false, true)
-			if err != nil {
-				panic(err)
-			}
-			msp.Run(vc)
-		}
-		if strings.Contains(msg.Content, "add") {
-			cmds := strings.Split(msg.Content, " ")
-			if len(cmds) != 2 {
-				s.ChannelMessageSendComplex(msg.ChannelID, &discordgo.MessageSend{
-					Content: fmt.Sprintf("<@%s> please use this format 'add <link>'", msg.Author.ID),
-					AllowedMentions: &discordgo.MessageAllowedMentions{
-						Parse: []discordgo.AllowedMentionType{discordgo.AllowedMentionTypeUsers},
-					},
-				})
-				return
-			}
-			msp.AddByURL(cmds[1])
-		}
-
-	})
+	// msp := model.NewMusicPlayer()
+	// bot.AddHandler()
 
 	fmt.Println("running")
 	sigs := make(chan os.Signal, 1)

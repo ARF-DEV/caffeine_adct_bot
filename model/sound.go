@@ -11,6 +11,16 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
+var airHornDefault OpusSound
+
+func init() {
+	var err error
+	airHornDefault, err = LoadSound("airhorn.dca")
+	if err != nil {
+		panic(err)
+	}
+}
+
 type OpusFrame []byte
 type OpusSound []OpusFrame
 
@@ -65,11 +75,14 @@ func (opus OpusSound) PlaySound(s *discordgo.Session, guildID, channelID string,
 	return nil
 }
 
-func (opus OpusSound) PlaySoundToVC(vc *discordgo.VoiceConnection) error {
+func (opus OpusSound) PlaySoundToVC(vc *discordgo.VoiceConnection, pause *bool) error {
 	vc.Speaking(true)
 	time.Sleep(200 * time.Millisecond)
 
 	for _, audioData := range opus {
+		for *pause {
+			time.Sleep(100 * time.Millisecond)
+		}
 		vc.OpusSend <- audioData
 	}
 

@@ -14,7 +14,7 @@ import (
 	"github.com/hraban/opus"
 )
 
-// TODO: add lists, and handle multiple musicplayer for multiple channel and guild
+// TODO: add print lists, and handle multiple musicplayer for multiple channel and guild
 const (
 	audioChannels  = 2
 	audioFrameRate = 48000
@@ -22,32 +22,57 @@ const (
 	audioBitRate   = 64
 )
 
+type PlayType uint8
+
+const (
+	playShuffle = 1
+	playLoop    = 2
+	playQueue   = 4
+)
+
 type MusicPlayerStream struct {
-	queue        []OpusSound
-	playedIdx    int
-	mx           *sync.Mutex
-	stop         chan bool
-	queueAddChan chan OpusSound
-	vc           *discordgo.VoiceConnection
+	queue          []OpusSound
+	playedIdx      int
+	mx             *sync.Mutex
+	stop           chan bool
+	queueAddChan   chan OpusSound
+	vc             *discordgo.VoiceConnection
+	pause          bool
+	initiated      bool
+	queueBehaviour PlayType
 }
 
 func NewMusicPlayer() MusicPlayerStream {
 	msp := MusicPlayerStream{
-		queue:        []OpusSound{},
-		playedIdx:    0,
-		mx:           &sync.Mutex{},
-		stop:         make(chan bool, 1),
-		queueAddChan: make(chan OpusSound, 1),
+		queue:          []OpusSound{},
+		playedIdx:      0,
+		mx:             &sync.Mutex{},
+		stop:           make(chan bool, 1),
+		queueAddChan:   make(chan OpusSound, 1),
+		queueBehaviour: playLoop,
 	}
 
 	return msp
 }
-func (mps *MusicPlayerStream) Run(vc *discordgo.VoiceConnection) {
-	mps.vc = vc
-	go mps.addToQueueProcess()
-	go mps.run(vc)
+func (mps *MusicPlayerStream) Pause() {
+	mps.pause = !mps.pause
 }
-func (mps *MusicPlayerStream) run(vc *discordgo.VoiceConnection) {
+func (mps *MusicPlayerStream) JoinVC(s *discordgo.Session, guildID, channelID string) error {
+	vc, err := s.ChannelVoiceJoin(guildID, channelID, false, true)
+	if err != nil {
+		return err
+	}
+	mps.vc = vc
+	return nil
+}
+func (mps *MusicPlayerStream) Run() {
+	if !mps.initiated {
+		go mps.addToQueueProcess()
+		go mps.run()
+	}
+	mps.initiated = true
+}
+func (mps *MusicPlayerStream) run() {
 	for {
 		select {
 		case <-mps.stop:
@@ -56,18 +81,29 @@ func (mps *MusicPlayerStream) run(vc *discordgo.VoiceConnection) {
 			time.Sleep(100 * time.Millisecond)
 		}
 
+		mps.mx.Lock()
+		// NOTE: there probably cleaner way to do this
 		if len(mps.queue)-mps.playedIdx == 0 {
-			log.Println("queue is empty")
+			if mps.queueBehaviour == playLoop {
+				mps.playedIdx = 0
+			} else {
+				log.Println("queue is empty")
+			}
+			mps.mx.Unlock()
 			continue
 		}
 		curMusic := mps.queue[mps.playedIdx]
+		mps.mx.Unlock()
 
-		err := curMusic.PlaySoundToVC(vc)
-		if err != nil {
-			log.Fatal("error when playing sound")
-			break
+		if mps.vc != nil {
+			// TODO: this still block process, make this concurrent
+			err := curMusic.PlaySoundToVC(mps.vc, &mps.pause)
+			if err != nil {
+				log.Fatal("error when playing sound")
+				break
+			}
+			mps.playedIdx++
 		}
-		mps.playedIdx++
 	}
 breakLoop:
 }
@@ -79,6 +115,7 @@ func (mps *MusicPlayerStream) addToQueueProcess() {
 			mps.mx.Lock()
 			mps.queue = append(mps.queue, newSounds)
 			mps.mx.Unlock()
+			fmt.Println("added to queue")
 		case <-mps.stop:
 			goto breakLoop
 		default:
@@ -113,6 +150,7 @@ func (mps *MusicPlayerStream) AddByURL(url string) {
 	if err != nil {
 		panic(err)
 	}
+	defer ffmpegOut.Close()
 
 	if err = ffmpeg.Start(); err != nil {
 		panic(err)
@@ -124,6 +162,7 @@ func (mps *MusicPlayerStream) AddByURL(url string) {
 
 	go func() {
 		defer ffmpegIn.Close()
+		defer outp.Close()
 		_, err := io.Copy(ffmpegIn, outp)
 		if err != nil {
 			log.Fatal("error on io.copy", err)
@@ -135,18 +174,12 @@ func (mps *MusicPlayerStream) AddByURL(url string) {
 		panic(err)
 	}
 
-	// vc, err := s.ChannelVoiceJoin(gID, cID, false, true)
-	// if err != nil {
-	// 	log.Println("error when connecting to voice channel: ", err)
-	// 	return
-	// }
-	// log.Printf("connecting to c: %s, g: %s SUCCESS \n", cID, gID)
-
-	// defer vc.Disconnect()
 	r := bufio.NewReaderSize(ffmpegOut, 16000)
 	buf := make([]int16, audioChannels*audioFrameSize)
+	i := 0
 	for {
 		err = binary.Read(r, binary.LittleEndian, buf)
+		fmt.Printf("i: %v, err: %v\n", i, err)
 		if err != nil {
 			if err == io.EOF {
 				break
@@ -163,14 +196,14 @@ func (mps *MusicPlayerStream) AddByURL(url string) {
 		}
 		// vc.OpusSend <- opus[:n]
 		newOpus = append(newOpus, opus[:n])
-
+		i++
 	}
 
 	// mps.mx.Lock()
 	// // mps.queue = append(mps.queue, newOpus)
 	// mps.mx.Unlock()
 	mps.queueAddChan <- newOpus
-
+	log.Println(url, "feed to channel")
 	if err = ytDlp.Wait(); err != nil {
 		log.Printf("yt-dlp command finished with error: %v", err)
 	}
