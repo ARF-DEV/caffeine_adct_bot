@@ -13,6 +13,7 @@ import (
 
 	"github.com/ARF-DEV/caffeine_adct_bot/config"
 	"github.com/ARF-DEV/caffeine_adct_bot/model"
+	"github.com/ARF-DEV/caffeine_adct_bot/utils/ytutils"
 	"github.com/bwmarrin/discordgo"
 	"github.com/hraban/opus"
 )
@@ -40,7 +41,9 @@ func main() {
 	defer bot.Close()
 	// msp := model.NewMusicPlayer()
 	// bot.AddHandler()
-
+	// ytutils.GetMetaData("https://www.youtube.com/watch?v=g-hW7RYaUXU")
+	// ytutils.GetMetaData("https://www.youtube.com/watch?v=XXYlFuWEuKI&list=RDQMgEzdN5RuCXE&start_radio=1")
+	ytutils.GetMetaData("https://www.youtube.com/watch?v=bjajDP8TtHE&list=PLVpjmYY8FsNe6bUsPug_Zsx866lnGyzun")
 	fmt.Println("running")
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)

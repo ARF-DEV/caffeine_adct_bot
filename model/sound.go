@@ -23,6 +23,11 @@ func init() {
 
 type OpusFrame []byte
 type OpusSound []OpusFrame
+type AudioData struct {
+	Frames OpusSound
+	Title  string
+	ID     string
+}
 
 func LoadSound(path string) (sound OpusSound, err error) {
 	file, err := os.Open(path)

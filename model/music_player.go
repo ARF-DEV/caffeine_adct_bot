@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ARF-DEV/caffeine_adct_bot/utils/ytutils"
 	"github.com/bwmarrin/discordgo"
 	"github.com/hraban/opus"
 )
@@ -31,11 +32,11 @@ const (
 )
 
 type MusicPlayerStream struct {
-	queue          []OpusSound
+	queue          []AudioData
 	playedIdx      int
 	mx             *sync.Mutex
 	stop           chan bool
-	queueAddChan   chan OpusSound
+	queueAddChan   chan AudioData
 	vc             *discordgo.VoiceConnection
 	pause          bool
 	initiated      bool
@@ -44,11 +45,11 @@ type MusicPlayerStream struct {
 
 func NewMusicPlayer() MusicPlayerStream {
 	msp := MusicPlayerStream{
-		queue:          []OpusSound{},
+		queue:          []AudioData{},
 		playedIdx:      0,
 		mx:             &sync.Mutex{},
 		stop:           make(chan bool, 1),
-		queueAddChan:   make(chan OpusSound, 1),
+		queueAddChan:   make(chan AudioData, 1),
 		queueBehaviour: playLoop,
 	}
 
@@ -97,7 +98,7 @@ func (mps *MusicPlayerStream) run() {
 
 		if mps.vc != nil {
 			// TODO: this still block process, make this concurrent
-			err := curMusic.PlaySoundToVC(mps.vc, &mps.pause)
+			err := curMusic.Frames.PlaySoundToVC(mps.vc, &mps.pause)
 			if err != nil {
 				log.Fatal("error when playing sound")
 				break
@@ -126,16 +127,21 @@ breakLoop:
 }
 
 func (mps *MusicPlayerStream) AddByURL(url string) {
-	newOpus := OpusSound{}
+	meta, err := ytutils.GetMetaData(url)
+	if err != nil {
+		panic(err)
+	}
+
+	if meta.Type == "playlist" {
+		log.Printf("ALTER: user try to download a playlist! %s", url)
+		return
+	}
+	newAudio := AudioData{
+		ID:    meta.ID,
+		Title: meta.Title,
+	}
 	ytDlp := exec.Command("yt-dlp", "-x", "-o", "-", fmt.Sprint(url))
-
 	ffmpeg := exec.Command("ffmpeg", "-v", "debug", "-i", "pipe:0", "-f", "s16le", "-ar", "48000", "pipe:1")
-	// out := bytes.Buffer{}
-	// cmd.Stdout = &out
-
-	//	if err := cmd.Run(); err != nil {
-	//		log.Fatal(err)
-	//	}
 	outp, err := ytDlp.StdoutPipe()
 	if err != nil {
 		panic(err)
@@ -195,14 +201,14 @@ func (mps *MusicPlayerStream) AddByURL(url string) {
 			panic(err)
 		}
 		// vc.OpusSend <- opus[:n]
-		newOpus = append(newOpus, opus[:n])
+		newAudio.Frames = append(newAudio.Frames, opus[:n])
 		i++
 	}
 
 	// mps.mx.Lock()
 	// // mps.queue = append(mps.queue, newOpus)
 	// mps.mx.Unlock()
-	mps.queueAddChan <- newOpus
+	mps.queueAddChan <- newAudio
 	log.Println(url, "feed to channel")
 	if err = ytDlp.Wait(); err != nil {
 		log.Printf("yt-dlp command finished with error: %v", err)
