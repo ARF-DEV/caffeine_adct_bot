@@ -46,10 +46,12 @@ func (db *DisBot) GetMusicPlayer(guildID, channelID string) (*MusicPlayerStream,
 	if err := newMps.JoinVC(db.session, guildID, channelID); err != nil {
 		return nil, err
 	}
+	newMps.InitQueue()
 
 	db.mx.Lock()
 	db.mpMap[key] = &newMps
 	db.mx.Unlock()
+
 	return &newMps, nil
 }
 
@@ -104,6 +106,30 @@ func (db *DisBot) joinVC(msg *discordgo.MessageCreate) {
 			return
 		}
 	}
+}
+
+func (db *DisBot) playList(msg *discordgo.MessageCreate) {
+	if msg.Content == "list" {
+		msp, err := db.GetMusicPlayer(msg.GuildID, msg.ChannelID)
+		if err != nil {
+			log.Printf("Error on DisBot.GetMusicPlayer(): %v", err)
+			return
+		}
+		queueList, playedIdx := msp.GetQueueList()
+		fmt.Println(queueList, playedIdx)
+		messageContent := ""
+		for i, title := range queueList {
+			messageContent += fmt.Sprintf("%d. %s\n", i+1, title)
+		}
+		messageContent += fmt.Sprintf("\nCurrently playing: %d. %s", playedIdx+1, queueList[playedIdx])
+		db.session.ChannelMessageSendComplex(msg.ChannelID, &discordgo.MessageSend{
+			Content: messageContent,
+			AllowedMentions: &discordgo.MessageAllowedMentions{
+				Parse: []discordgo.AllowedMentionType{discordgo.AllowedMentionTypeUsers},
+			},
+		})
+	}
+
 }
 
 func (db *DisBot) play(msg *discordgo.MessageCreate) {
@@ -193,5 +219,6 @@ func (db *DisBot) messageCreateDispatch() map[string]func(*discordgo.MessageCrea
 		"pause":    db.pause,
 		"add":      db.addMusic,
 		"play":     db.play,
+		"list":     db.playList,
 	}
 }

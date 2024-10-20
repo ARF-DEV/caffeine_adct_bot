@@ -32,15 +32,16 @@ const (
 )
 
 type MusicPlayerStream struct {
-	queue          []AudioData
-	playedIdx      int
-	mx             *sync.Mutex
-	stop           chan bool
-	queueAddChan   chan AudioData
-	vc             *discordgo.VoiceConnection
-	pause          bool
-	initiated      bool
-	queueBehaviour PlayType
+	queue             []AudioData
+	playedIdx         int
+	mx                *sync.Mutex
+	stop              chan bool
+	queueAddChan      chan AudioData
+	vc                *discordgo.VoiceConnection
+	pause             bool
+	runInitiated      bool
+	addQueueInitiated bool
+	queueBehaviour    PlayType
 }
 
 func NewMusicPlayer() MusicPlayerStream {
@@ -49,7 +50,7 @@ func NewMusicPlayer() MusicPlayerStream {
 		playedIdx:      0,
 		mx:             &sync.Mutex{},
 		stop:           make(chan bool, 1),
-		queueAddChan:   make(chan AudioData, 1),
+		queueAddChan:   make(chan AudioData),
 		queueBehaviour: playLoop,
 	}
 
@@ -67,12 +68,24 @@ func (mps *MusicPlayerStream) JoinVC(s *discordgo.Session, guildID, channelID st
 	return nil
 }
 func (mps *MusicPlayerStream) Run() {
-	if !mps.initiated {
-		go mps.addToQueueProcess()
+	if !mps.runInitiated {
 		go mps.run()
+		mps.runInitiated = true
 	}
-	mps.initiated = true
+	if !mps.addQueueInitiated {
+		go mps.addToQueueProcess()
+		mps.addQueueInitiated = true
+	}
 }
+
+func (mps *MusicPlayerStream) InitQueue() {
+	if !mps.addQueueInitiated {
+		go mps.addToQueueProcess()
+		mps.addQueueInitiated = true
+	}
+}
+
+// func (mps *MusicPlayerStream)
 func (mps *MusicPlayerStream) run() {
 	for {
 		select {
@@ -124,6 +137,16 @@ func (mps *MusicPlayerStream) addToQueueProcess() {
 		}
 	}
 breakLoop:
+}
+
+func (mps *MusicPlayerStream) GetQueueList() ([]string, int) {
+	titles := []string{}
+	mps.mx.Lock()
+	for _, vid := range mps.queue {
+		titles = append(titles, vid.Title)
+	}
+	mps.mx.Unlock()
+	return titles, mps.playedIdx
 }
 
 func (mps *MusicPlayerStream) AddByURL(url string) {
