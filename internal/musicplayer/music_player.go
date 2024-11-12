@@ -1,4 +1,4 @@
-package internal
+package musicplayer
 
 import (
 	"bufio"
@@ -15,7 +15,7 @@ import (
 	"github.com/hraban/opus"
 )
 
-// TODO: add print lists, and handle multiple musicplayer for multiple channel and guild
+// TODO: handle multiple musicplayer for multiple channel and guild (not yet tested)
 const (
 	audioChannels  = 2
 	audioFrameRate = 48000
@@ -35,8 +35,8 @@ type MusicPlayerStream struct {
 	queue             []AudioData
 	playedIdx         int
 	mx                *sync.Mutex
-	stop              chan bool
 	queueAddChan      chan AudioData
+	stop              <-chan struct{}
 	vc                *discordgo.VoiceConnection
 	pause             bool
 	runInitiated      bool
@@ -49,7 +49,7 @@ func NewMusicPlayer() MusicPlayerStream {
 		queue:          []AudioData{},
 		playedIdx:      0,
 		mx:             &sync.Mutex{},
-		stop:           make(chan bool, 1),
+		stop:           make(chan struct{}),
 		queueAddChan:   make(chan AudioData),
 		queueBehaviour: playLoop,
 	}
@@ -85,41 +85,40 @@ func (mps *MusicPlayerStream) InitQueue() {
 	}
 }
 
-// func (mps *MusicPlayerStream)
 func (mps *MusicPlayerStream) run() {
+	finish := make(chan error, 1)
+	finish <- nil
 	for {
 		select {
 		case <-mps.stop:
-			goto breakLoop
+			return
+		case err := <-finish:
+			if err != nil {
+				log.Println("error on <-finish: ", err)
+				return
+			}
+			mps.mx.Lock()
+			// NOTE: there probably cleaner way to do this
+			if mps.playedIdx >= len(mps.queue) {
+				if mps.queueBehaviour == playLoop {
+					mps.playedIdx = 0
+				} else {
+					log.Println("queue is empty")
+				}
+				mps.mx.Unlock()
+				continue
+			}
+			curMusic := mps.queue[mps.playedIdx]
+			mps.mx.Unlock()
+
+			if mps.vc != nil {
+				go curMusic.Frames.PlaySoundToVC(finish, mps.vc, &mps.pause)
+				mps.playedIdx++
+			}
 		default:
 			time.Sleep(100 * time.Millisecond)
 		}
-
-		mps.mx.Lock()
-		// NOTE: there probably cleaner way to do this
-		if len(mps.queue)-mps.playedIdx == 0 {
-			if mps.queueBehaviour == playLoop {
-				mps.playedIdx = 0
-			} else {
-				log.Println("queue is empty")
-			}
-			mps.mx.Unlock()
-			continue
-		}
-		curMusic := mps.queue[mps.playedIdx]
-		mps.mx.Unlock()
-
-		if mps.vc != nil {
-			// TODO: this still block process, make this concurrent
-			err := curMusic.Frames.PlaySoundToVC(mps.vc, &mps.pause)
-			if err != nil {
-				log.Fatal("error when playing sound")
-				break
-			}
-			mps.playedIdx++
-		}
 	}
-breakLoop:
 }
 
 func (mps *MusicPlayerStream) addToQueueProcess() {
@@ -129,14 +128,12 @@ func (mps *MusicPlayerStream) addToQueueProcess() {
 			mps.mx.Lock()
 			mps.queue = append(mps.queue, newSounds)
 			mps.mx.Unlock()
-			fmt.Println("added to queue")
 		case <-mps.stop:
-			goto breakLoop
+			return
 		default:
 			continue
 		}
 	}
-breakLoop:
 }
 
 func (mps *MusicPlayerStream) GetQueueList() ([]string, int) {
@@ -150,13 +147,14 @@ func (mps *MusicPlayerStream) GetQueueList() ([]string, int) {
 }
 
 func (mps *MusicPlayerStream) AddByURL(url string) {
+	// todo handle errors
 	meta, err := ytutils.GetMetaData(url)
 	if err != nil {
 		panic(err)
 	}
 
 	if meta.Type == "playlist" {
-		log.Printf("ALTER: user try to download a playlist! %s", url)
+		log.Printf("ALERT: user try to download a playlist! %s", url)
 		return
 	}
 	newAudio := AudioData{
@@ -223,16 +221,11 @@ func (mps *MusicPlayerStream) AddByURL(url string) {
 		if err != nil {
 			panic(err)
 		}
-		// vc.OpusSend <- opus[:n]
 		newAudio.Frames = append(newAudio.Frames, opus[:n])
 		i++
 	}
 
-	// mps.mx.Lock()
-	// // mps.queue = append(mps.queue, newOpus)
-	// mps.mx.Unlock()
 	mps.queueAddChan <- newAudio
-	log.Println(url, "feed to channel")
 	if err = ytDlp.Wait(); err != nil {
 		log.Printf("yt-dlp command finished with error: %v", err)
 	}
