@@ -12,7 +12,7 @@ import (
 	"syscall"
 
 	"github.com/ARF-DEV/caffeine_adct_bot/config"
-	"github.com/ARF-DEV/caffeine_adct_bot/model"
+	"github.com/ARF-DEV/caffeine_adct_bot/internal"
 	"github.com/bwmarrin/discordgo"
 	"github.com/hraban/opus"
 )
@@ -32,7 +32,7 @@ func main() {
 		panic(err)
 	}
 
-	bot, err := model.NewDisBot(config)
+	bot, err := internal.NewDisBot(config)
 	if err != nil {
 		panic(err)
 	}

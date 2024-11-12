@@ -1,4 +1,4 @@
-package model
+package internal
 
 import (
 	"fmt"
@@ -9,12 +9,6 @@ import (
 	"github.com/ARF-DEV/caffeine_adct_bot/config"
 	"github.com/bwmarrin/discordgo"
 )
-
-type DisBot struct {
-	session *discordgo.Session
-	mpMap   map[string]*MusicPlayerStream
-	mx      *sync.Mutex
-}
 
 func NewDisBot(cfg config.Config) (*DisBot, error) {
 	b, err := discordgo.New("Bot " + cfg.DiscordAppKey)
