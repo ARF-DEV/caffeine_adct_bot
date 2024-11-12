@@ -20,8 +20,6 @@ type (
 	ActionType         string
 )
 
-var airHornDefault musicplayer.OpusSound
-
 const (
 	WASSAP   ActionType = "wassup"
 	AIR_HORN ActionType = "!airhorn"

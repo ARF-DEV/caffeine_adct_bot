@@ -50,13 +50,7 @@ func LoadSound(path string) (sound OpusSound, err error) {
 	}
 }
 
-func (opus OpusSound) PlaySound(s *discordgo.Session, guildID, channelID string, packageSize uint64) error {
-	fmt.Println("start", guildID, channelID)
-	vc, err := s.ChannelVoiceJoin(guildID, channelID, false, true)
-	if err != nil {
-		return err
-	}
-	defer vc.Disconnect()
+func (opus OpusSound) PlaySound(vc *discordgo.VoiceConnection) error {
 	vc.Speaking(true)
 	time.Sleep(200 * time.Millisecond)
 

@@ -2,7 +2,6 @@ package bot
 
 import (
 	"fmt"
-	"log"
 	"strings"
 	"sync"
 
@@ -73,18 +72,13 @@ func (db *DisBot) airHorn(msg *discordgo.MessageCreate) {
 		},
 	})
 
-	c, err := db.session.State.Channel(msg.ChannelID)
+	mps, err := db.GetMusicPlayer(msg.GuildID, msg.ChannelID)
 	if err != nil {
-		db.storeError(fmt.Sprintf("Error when finding channel: %v", err))
-	}
-	g, err := db.session.State.Guild(c.GuildID)
-	if err != nil {
-		db.storeError(fmt.Sprintf("Error when finding guildID: %v", err))
+		db.storeError(err.Error())
+		return
 	}
 
-	if err = airHornDefault.PlaySound(db.session, g.ID, c.ID, 320); err != nil {
-		log.Printf("Error on playSound(): %v", err)
-	}
+	mps.PlayAirHorn()
 }
 
 func (db *DisBot) wassup(msg *discordgo.MessageCreate) {

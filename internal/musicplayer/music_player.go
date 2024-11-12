@@ -149,6 +149,7 @@ func (mps *MusicPlayerStream) GetQueueList() ([]string, int) {
 	return titles, mps.playIdx
 }
 
+// IMPORTANT: IMPLEMENT OAUTH TO AVOID IP BEING BLOCK
 func (mps *MusicPlayerStream) AddByURL(url string) {
 	// todo handle errors
 	meta, err := ytutils.GetMetaData(url)
@@ -156,6 +157,7 @@ func (mps *MusicPlayerStream) AddByURL(url string) {
 		panic(err)
 	}
 
+	// meta := ytutils.YTVideoMeta{}
 	if meta.Type == "playlist" {
 		log.Printf("ALERT: user try to download a playlist! %s", url)
 		return
@@ -236,4 +238,10 @@ func (mps *MusicPlayerStream) AddByURL(url string) {
 		log.Printf("yt-dlp command finished with error: %v", err)
 	}
 
+}
+
+func (mps *MusicPlayerStream) PlayAirHorn() {
+	mps.Pause()
+	airHornDefault.PlaySound(mps.vc)
+	mps.Pause()
 }
