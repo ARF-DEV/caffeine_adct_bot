@@ -33,7 +33,8 @@ const (
 
 type MusicPlayerStream struct {
 	queue             []AudioData
-	playedIdx         int
+	playIdx           int
+	nextPlayIdx       int
 	mx                *sync.Mutex
 	queueAddChan      chan AudioData
 	stop              <-chan struct{}
@@ -47,7 +48,8 @@ type MusicPlayerStream struct {
 func NewMusicPlayer() MusicPlayerStream {
 	msp := MusicPlayerStream{
 		queue:          []AudioData{},
-		playedIdx:      0,
+		playIdx:        0,
+		nextPlayIdx:    0,
 		mx:             &sync.Mutex{},
 		stop:           make(chan struct{}),
 		queueAddChan:   make(chan AudioData),
@@ -98,22 +100,23 @@ func (mps *MusicPlayerStream) run() {
 				return
 			}
 			mps.mx.Lock()
-			// NOTE: there probably cleaner way to do this
-			if mps.playedIdx >= len(mps.queue) {
+			mps.playIdx = mps.nextPlayIdx
+			if mps.playIdx >= len(mps.queue) {
 				if mps.queueBehaviour == playLoop {
-					mps.playedIdx = 0
+					mps.playIdx = 0
 				} else {
 					log.Println("queue is empty")
 				}
 				mps.mx.Unlock()
 				continue
 			}
-			curMusic := mps.queue[mps.playedIdx]
+			curMusic := mps.queue[mps.playIdx]
 			mps.mx.Unlock()
 
 			if mps.vc != nil {
 				go curMusic.Frames.PlaySoundToVC(finish, mps.vc, &mps.pause)
-				mps.playedIdx++
+				mps.nextPlayIdx++
+
 			}
 		default:
 			time.Sleep(100 * time.Millisecond)
@@ -143,7 +146,7 @@ func (mps *MusicPlayerStream) GetQueueList() ([]string, int) {
 		titles = append(titles, vid.Title)
 	}
 	mps.mx.Unlock()
-	return titles, mps.playedIdx
+	return titles, mps.playIdx
 }
 
 func (mps *MusicPlayerStream) AddByURL(url string) {
