@@ -21,11 +21,12 @@ type (
 )
 
 const (
-	WASSAP   ActionType = "wassup"
-	AIR_HORN ActionType = "!airhorn"
-	JOIN     ActionType = "join"
-	PAUSE    ActionType = "pause"
-	PLAY     ActionType = "play"
-	ADD      ActionType = "add"
-	LIST     ActionType = "list"
+	WASSAP       ActionType = "wassup"
+	AIR_HORN     ActionType = "!airhorn"
+	JOIN         ActionType = "join"
+	PAUSE        ActionType = "pause"
+	PLAY         ActionType = "play"
+	ADD          ActionType = "add"
+	LIST         ActionType = "list"
+	SWITCH_SOUND ActionType = "switch"
 )

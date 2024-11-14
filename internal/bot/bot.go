@@ -2,6 +2,8 @@ package bot
 
 import (
 	"fmt"
+	"log"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -28,6 +30,7 @@ func NewDisBot(cfg config.Config) (*DisBot, error) {
 	disBot.insertMsgCreateFn(ADD, disBot.addMusic)
 	disBot.insertMsgCreateFn(PLAY, disBot.play)
 	disBot.insertMsgCreateFn(LIST, disBot.printList)
+	disBot.insertMsgCreateFn(SWITCH_SOUND, disBot.switchMusic)
 	disBot.init()
 
 	return &disBot, nil
@@ -37,6 +40,7 @@ func (db DisBot) GenerateHandlers() []interface{} {
 	return nil
 }
 
+// TODO: separate join vc and get pusic player
 func (db *DisBot) GetMusicPlayer(guildID, channelID string) (*musicplayer.MusicPlayerStream, error) {
 	key := db.generateMapKey(guildID, channelID)
 	mps, found := db.mpMap[key]
@@ -129,6 +133,41 @@ func (db *DisBot) play(msg *discordgo.MessageCreate) {
 		return
 	}
 	msp.Run()
+}
+
+func (db *DisBot) switchMusic(msg *discordgo.MessageCreate) {
+	cmds := strings.Split(msg.Content, " ")
+
+	if len(cmds) != 2 {
+		db.session.ChannelMessageSendComplex(msg.ChannelID, &discordgo.MessageSend{
+			Content: fmt.Sprintf("<@%s> please use this format 'switch <sound-number>' look at command 'list' to see sound-number", msg.Author.ID),
+			AllowedMentions: &discordgo.MessageAllowedMentions{
+				Parse: []discordgo.AllowedMentionType{discordgo.AllowedMentionTypeUsers},
+			},
+		})
+		return
+	}
+
+	soundNumber, err := strconv.ParseInt(cmds[1], 0, 64)
+	if err != nil {
+		db.session.ChannelMessageSendComplex(msg.ChannelID, &discordgo.MessageSend{
+			Content: fmt.Sprintf("<@%s> sound-number must be a number", msg.Author.ID),
+			AllowedMentions: &discordgo.MessageAllowedMentions{
+				Parse: []discordgo.AllowedMentionType{discordgo.AllowedMentionTypeUsers},
+			},
+		})
+		return
+	}
+
+	msp, err := db.GetMusicPlayer(msg.GuildID, msg.ChannelID)
+	if err != nil {
+		log.Println(err)
+		db.storeError(err.Error())
+		return
+	}
+
+	msp.SwitchSound(int(soundNumber) - 1)
+
 }
 
 func (db *DisBot) pause(msg *discordgo.MessageCreate) {

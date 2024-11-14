@@ -36,6 +36,7 @@ type MusicPlayerStream struct {
 	queue             []AudioData
 	playIdx           int
 	nextPlayIdx       int
+	switchSoundReq    chan int
 	mx                *sync.Mutex
 	queueAddChan      chan AudioData
 	stop              <-chan struct{}
@@ -54,14 +55,17 @@ func NewMusicPlayer() MusicPlayerStream {
 		mx:             &sync.Mutex{},
 		stop:           make(chan struct{}),
 		queueAddChan:   make(chan AudioData),
+		switchSoundReq: make(chan int),
 		queueBehaviour: playLoop,
 	}
 
 	return msp
 }
+
 func (mps *MusicPlayerStream) Pause() {
 	mps.pause = !mps.pause
 }
+
 func (mps *MusicPlayerStream) JoinVC(s *discordgo.Session, guildID, channelID string) error {
 	vc, err := s.ChannelVoiceJoin(guildID, channelID, false, true)
 	if err != nil {
@@ -70,6 +74,7 @@ func (mps *MusicPlayerStream) JoinVC(s *discordgo.Session, guildID, channelID st
 	mps.vc = vc
 	return nil
 }
+
 func (mps *MusicPlayerStream) Run() {
 	if !mps.runInitiated {
 		go mps.run()
@@ -88,9 +93,14 @@ func (mps *MusicPlayerStream) InitQueue() {
 	}
 }
 
+func (mps *MusicPlayerStream) SwitchSound(idx int) {
+	mps.switchSoundReq <- idx
+}
 func (mps *MusicPlayerStream) run() {
-	finish := make(chan error, 1)
-	finish <- nil
+	finish := make(chan error)
+	go func() {
+		finish <- nil
+	}()
 	for {
 		select {
 		case <-mps.stop:
@@ -114,13 +124,16 @@ func (mps *MusicPlayerStream) run() {
 			}
 			curMusic := mps.queue[mps.playIdx]
 			mps.mx.Unlock()
-
+			// we can do something cleaner than this
 			if mps.vc != nil {
 				go curMusic.Frames.PlaySoundToVC(finish, mps.vc, &mps.pause)
 				mps.nextPlayIdx++
-				fmt.Printf("playing: \033[32m%s", curMusic.Title)
+				fmt.Printf("playing: \033[32m%s %d, %d\n", curMusic.Title, mps.playIdx, mps.nextPlayIdx)
 
 			}
+		case mps.nextPlayIdx = <-mps.switchSoundReq:
+			fmt.Println("Switch: ", mps.nextPlayIdx)
+			finish <- nil
 		default:
 			time.Sleep(100 * time.Millisecond)
 		}

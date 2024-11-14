@@ -19,6 +19,14 @@ type AudioData struct {
 	ID     string
 }
 
+func Create(Title, ID string, Frames OpusSound) AudioData {
+	return AudioData{
+		Title:  Title,
+		Frames: Frames,
+		ID:     ID,
+	}
+}
+
 func LoadSound(path string) (sound OpusSound, err error) {
 	file, err := os.Open(path)
 	if err != nil {
@@ -64,7 +72,7 @@ func (opus OpusSound) PlaySound(vc *discordgo.VoiceConnection) error {
 	return nil
 }
 
-func (opus OpusSound) PlaySoundToVC(finish chan<- error, vc *discordgo.VoiceConnection, pause *bool) {
+func (opus OpusSound) PlaySoundToVC(finish chan error, vc *discordgo.VoiceConnection, pause *bool) {
 	var err error
 	defer func() {
 		finish <- err
@@ -79,9 +87,16 @@ func (opus OpusSound) PlaySoundToVC(finish chan<- error, vc *discordgo.VoiceConn
 		for *pause {
 			time.Sleep(100 * time.Millisecond)
 		}
-		vc.OpusSend <- audioData
+		select {
+		case <-finish:
+			fmt.Println("goottt ittt")
+			goto breakLoop
+		default:
+			vc.OpusSend <- audioData
+		}
 	}
 
+breakLoop:
 	time.Sleep(200 * time.Millisecond)
 	if err = vc.Speaking(false); err != nil {
 		return
