@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
 	"os/exec"
 	"sync"
 	"time"
@@ -103,10 +104,11 @@ func (mps *MusicPlayerStream) run() {
 			mps.playIdx = mps.nextPlayIdx
 			if mps.playIdx >= len(mps.queue) {
 				if mps.queueBehaviour == playLoop {
-					mps.playIdx = 0
+					mps.nextPlayIdx = 0
 				} else {
 					log.Println("queue is empty")
 				}
+				finish <- nil
 				mps.mx.Unlock()
 				continue
 			}
@@ -116,6 +118,7 @@ func (mps *MusicPlayerStream) run() {
 			if mps.vc != nil {
 				go curMusic.Frames.PlaySoundToVC(finish, mps.vc, &mps.pause)
 				mps.nextPlayIdx++
+				fmt.Printf("playing: \033[32m%s", curMusic.Title)
 
 			}
 		default:
@@ -149,15 +152,12 @@ func (mps *MusicPlayerStream) GetQueueList() ([]string, int) {
 	return titles, mps.playIdx
 }
 
-// IMPORTANT: IMPLEMENT OAUTH TO AVOID IP BEING BLOCK
 func (mps *MusicPlayerStream) AddByURL(url string) {
-	// todo handle errors
 	meta, err := ytutils.GetMetaData(url)
 	if err != nil {
 		panic(err)
 	}
 
-	// meta := ytutils.YTVideoMeta{}
 	if meta.Type == "playlist" {
 		log.Printf("ALERT: user try to download a playlist! %s", url)
 		return
@@ -166,13 +166,18 @@ func (mps *MusicPlayerStream) AddByURL(url string) {
 		ID:    meta.ID,
 		Title: meta.Title,
 	}
+
 	ytDlp := exec.Command("yt-dlp", "-x", "-o", "-", fmt.Sprint(url))
-	ffmpeg := exec.Command("ffmpeg", "-v", "debug", "-i", "pipe:0", "-f", "s16le", "-ar", "48000", "pipe:1")
-	outp, err := ytDlp.StdoutPipe()
+	ytDlpOut, err := ytDlp.StdoutPipe()
+	if err != nil {
+		panic(err)
+	}
+	ytDlpErr, err := ytDlp.StderrPipe()
 	if err != nil {
 		panic(err)
 	}
 
+	ffmpeg := exec.Command("ffmpeg", "-v", "debug", "-i", "pipe:0", "-f", "s16le", "-ar", "48000", "pipe:1")
 	ffmpegIn, err := ffmpeg.StdinPipe()
 	if err != nil {
 		panic(err)
@@ -194,11 +199,13 @@ func (mps *MusicPlayerStream) AddByURL(url string) {
 
 	go func() {
 		defer ffmpegIn.Close()
-		defer outp.Close()
-		_, err := io.Copy(ffmpegIn, outp)
-		if err != nil {
-			log.Fatal("error on io.copy", err)
-		}
+		defer ytDlpOut.Close()
+		defer ytDlpErr.Close()
+		io.Copy(ffmpegIn, ytDlpOut)
+	}()
+
+	go func() {
+		io.Copy(os.Stdout, ytDlpErr)
 	}()
 
 	opusEncoder, err := opus.NewEncoder(audioFrameRate, audioChannels, opus.AppAudio)
@@ -211,7 +218,6 @@ func (mps *MusicPlayerStream) AddByURL(url string) {
 	i := 0
 	for {
 		err = binary.Read(r, binary.LittleEndian, buf)
-		fmt.Printf("i: %v, err: %v\n", i, err)
 		if err != nil {
 			if err == io.EOF {
 				break
