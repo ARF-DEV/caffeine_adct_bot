@@ -1,4 +1,4 @@
-package musicplayer
+package audio
 
 import (
 	"encoding/binary"
@@ -17,6 +17,49 @@ type AudioData struct {
 	Frames OpusSound
 	Title  string
 	ID     string
+	finish chan error
+}
+
+func (ad *AudioData) Finish(err error) {
+	ad.finish <- err
+	// }()
+}
+
+func (ad *AudioData) GetFinishChan() <-chan error {
+	return ad.finish
+}
+func (ad *AudioData) PlaySoundToVC(vc *discordgo.VoiceConnection, pause *bool) {
+	var err error
+
+	defer func() {
+		fmt.Println("poawkdaowkd ", ad.Title)
+		ad.finish <- err
+	}()
+
+	if err = vc.Speaking(true); err != nil {
+		return
+	}
+	time.Sleep(200 * time.Millisecond)
+
+	for _, audioData := range ad.Frames {
+		for *pause {
+			time.Sleep(100 * time.Millisecond)
+		}
+		select {
+		case <-ad.finish:
+			fmt.Println("goottt ittt")
+			goto breakLoop
+		default:
+			vc.OpusSend <- audioData
+		}
+	}
+
+breakLoop:
+	time.Sleep(200 * time.Millisecond)
+	if err = vc.Speaking(false); err != nil {
+		return
+	}
+
 }
 
 func Create(Title, ID string, Frames OpusSound) AudioData {
@@ -24,6 +67,7 @@ func Create(Title, ID string, Frames OpusSound) AudioData {
 		Title:  Title,
 		Frames: Frames,
 		ID:     ID,
+		finish: make(chan error),
 	}
 }
 
@@ -70,35 +114,4 @@ func (opus OpusSound) PlaySound(vc *discordgo.VoiceConnection) error {
 	vc.Speaking(false)
 
 	return nil
-}
-
-func (opus OpusSound) PlaySoundToVC(finish chan error, vc *discordgo.VoiceConnection, pause *bool) {
-	var err error
-	defer func() {
-		finish <- err
-	}()
-
-	if err = vc.Speaking(true); err != nil {
-		return
-	}
-	time.Sleep(200 * time.Millisecond)
-
-	for _, audioData := range opus {
-		for *pause {
-			time.Sleep(100 * time.Millisecond)
-		}
-		select {
-		case <-finish:
-			fmt.Println("goottt ittt")
-			goto breakLoop
-		default:
-			vc.OpusSend <- audioData
-		}
-	}
-
-breakLoop:
-	time.Sleep(200 * time.Millisecond)
-	if err = vc.Speaking(false); err != nil {
-		return
-	}
 }

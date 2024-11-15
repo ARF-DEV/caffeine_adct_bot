@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ARF-DEV/caffeine_adct_bot/internal/audio"
 	"github.com/ARF-DEV/caffeine_adct_bot/utils/ytutils"
 	"github.com/bwmarrin/discordgo"
 	"github.com/hraban/opus"
@@ -33,12 +34,12 @@ const (
 )
 
 type MusicPlayerStream struct {
-	queue             []AudioData
+	queue             []audio.AudioData
 	playIdx           int
 	nextPlayIdx       int
 	switchSoundReq    chan int
 	mx                *sync.Mutex
-	queueAddChan      chan AudioData
+	queueAddChan      chan audio.AudioData
 	stop              <-chan struct{}
 	vc                *discordgo.VoiceConnection
 	pause             bool
@@ -49,12 +50,12 @@ type MusicPlayerStream struct {
 
 func NewMusicPlayer() MusicPlayerStream {
 	msp := MusicPlayerStream{
-		queue:          []AudioData{},
+		queue:          []audio.AudioData{},
 		playIdx:        0,
 		nextPlayIdx:    0,
 		mx:             &sync.Mutex{},
 		stop:           make(chan struct{}),
-		queueAddChan:   make(chan AudioData),
+		queueAddChan:   make(chan audio.AudioData),
 		switchSoundReq: make(chan int),
 		queueBehaviour: playLoop,
 	}
@@ -97,50 +98,48 @@ func (mps *MusicPlayerStream) SwitchSound(idx int) {
 	mps.switchSoundReq <- idx
 }
 func (mps *MusicPlayerStream) run() {
-	finish := make(chan error)
-	go func() {
-		finish <- nil
-	}()
+	curMusic := mps.queue[mps.playIdx]
+	mps.nextPlayIdx++
+	go curMusic.PlaySoundToVC(mps.vc, &mps.pause)
+
+	defer close(mps.switchSoundReq)
 	for {
 		select {
 		case <-mps.stop:
 			return
-		case err := <-finish:
+		case err := <-curMusic.GetFinishChan():
 			if err != nil {
 				log.Println("error on <-finish: ", err)
 				return
 			}
 			mps.mx.Lock()
-			mps.playIdx = mps.nextPlayIdx
-			if mps.playIdx >= len(mps.queue) {
+			if mps.nextPlayIdx >= len(mps.queue) {
 				if mps.queueBehaviour == playLoop {
 					mps.nextPlayIdx = 0
 				} else {
 					log.Println("queue is empty")
 				}
-				finish <- nil
-				mps.mx.Unlock()
-				continue
 			}
-			curMusic := mps.queue[mps.playIdx]
-			mps.mx.Unlock()
-			// we can do something cleaner than this
-			if mps.vc != nil {
-				go curMusic.Frames.PlaySoundToVC(finish, mps.vc, &mps.pause)
-				mps.nextPlayIdx++
-				fmt.Printf("playing: \033[32m%s %d, %d\n", curMusic.Title, mps.playIdx, mps.nextPlayIdx)
 
+			mps.playIdx = mps.nextPlayIdx
+			mps.nextPlayIdx++
+			curMusic = mps.queue[mps.playIdx]
+			mps.mx.Unlock()
+			if mps.vc != nil {
+				go curMusic.PlaySoundToVC(mps.vc, &mps.pause)
+				fmt.Printf("playing: \033[32m%s %d, %d\033[0m\n", curMusic.Title, mps.playIdx, mps.nextPlayIdx)
 			}
 		case mps.nextPlayIdx = <-mps.switchSoundReq:
-			fmt.Println("Switch: ", mps.nextPlayIdx)
-			finish <- nil
+			curMusic.Finish(nil)
 		default:
+			// fmt.Println("cur_music: ", curMusic.Title)
 			time.Sleep(100 * time.Millisecond)
 		}
 	}
 }
 
 func (mps *MusicPlayerStream) addToQueueProcess() {
+	defer close(mps.queueAddChan)
 	for {
 		select {
 		case newSounds := <-mps.queueAddChan:
@@ -175,10 +174,7 @@ func (mps *MusicPlayerStream) AddByURL(url string) {
 		log.Printf("ALERT: user try to download a playlist! %s", url)
 		return
 	}
-	newAudio := AudioData{
-		ID:    meta.ID,
-		Title: meta.Title,
-	}
+	newAudio := audio.Create(meta.Title, meta.ID, audio.OpusSound{})
 
 	ytDlp := exec.Command("yt-dlp", "-x", "-o", "-", fmt.Sprint(url))
 	ytDlpOut, err := ytDlp.StdoutPipe()
@@ -261,6 +257,6 @@ func (mps *MusicPlayerStream) AddByURL(url string) {
 
 func (mps *MusicPlayerStream) PlayAirHorn() {
 	mps.Pause()
-	airHornDefault.PlaySound(mps.vc)
+	audio.AirHornDefault.PlaySound(mps.vc)
 	mps.Pause()
 }
