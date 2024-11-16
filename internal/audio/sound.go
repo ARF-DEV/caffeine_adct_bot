@@ -20,9 +20,11 @@ type AudioData struct {
 	finish chan error
 }
 
+func (ad AudioData) String() string {
+	return fmt.Sprintf("%s %s", ad.Title, ad.ID)
+}
 func (ad *AudioData) Finish(err error) {
 	ad.finish <- err
-	// }()
 }
 
 func (ad *AudioData) GetFinishChan() <-chan error {
@@ -32,7 +34,6 @@ func (ad *AudioData) PlaySoundToVC(vc *discordgo.VoiceConnection, pause *bool) {
 	var err error
 
 	defer func() {
-		fmt.Println("poawkdaowkd ", ad.Title)
 		ad.finish <- err
 	}()
 
@@ -114,4 +115,8 @@ func (opus OpusSound) PlaySound(vc *discordgo.VoiceConnection) error {
 	vc.Speaking(false)
 
 	return nil
+}
+
+func (opus OpusSound) String() string {
+	return fmt.Sprintf("opos_sound_len: %d", len(opus))
 }

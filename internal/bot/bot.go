@@ -42,23 +42,23 @@ func (db DisBot) GenerateHandlers() []interface{} {
 
 // TODO: separate join vc and get pusic player
 func (db *DisBot) GetMusicPlayer(guildID, channelID string) (*musicplayer.MusicPlayerStream, error) {
+	db.mx.Lock()
+	defer db.mx.Unlock()
 	key := db.generateMapKey(guildID, channelID)
 	mps, found := db.mpMap[key]
 	if found {
 		return mps, nil
 	}
 
-	newMps := musicplayer.NewMusicPlayer()
+	newMps := musicplayer.NewMusicPlayer(key)
 	if err := newMps.JoinVC(db.session, guildID, channelID); err != nil {
 		return nil, err
 	}
-	newMps.InitQueue()
 
-	db.mx.Lock()
-	db.mpMap[key] = &newMps
-	db.mx.Unlock()
+	newMps.Init()
+	db.mpMap[key] = newMps
 
-	return &newMps, nil
+	return newMps, nil
 }
 
 func (db *DisBot) insertMsgCreateFn(actionType ActionType, f discrodMsgCreateFn) {
@@ -116,6 +116,7 @@ func (db *DisBot) printList(msg *discordgo.MessageCreate) {
 	for i, title := range queueList {
 		messageContent += fmt.Sprintf("%d. %s\n", i+1, title)
 	}
+
 	messageContent += fmt.Sprintf("\nCurrently playing: %d. %s", playedIdx+1, queueList[playedIdx])
 	db.session.ChannelMessageSendComplex(msg.ChannelID, &discordgo.MessageSend{
 		Content: messageContent,
@@ -228,7 +229,6 @@ func (db *DisBot) init() {
 			db.storeError(fmt.Sprintf("handler for action %s are not implemented", strSplit[0]))
 			return
 		}
-
 		handler(msg)
 	})
 }
