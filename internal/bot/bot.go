@@ -10,9 +10,10 @@ import (
 	"github.com/ARF-DEV/caffeine_adct_bot/config"
 	"github.com/ARF-DEV/caffeine_adct_bot/internal/musicplayer"
 	"github.com/bwmarrin/discordgo"
+	"github.com/redis/go-redis/v9"
 )
 
-func NewDisBot(cfg config.Config) (*DisBot, error) {
+func NewDisBot(cfg config.Config, r *redis.Client) (*DisBot, error) {
 	b, err := discordgo.New("Bot " + cfg.DiscordAppKey)
 	if err != nil {
 		return nil, err
@@ -22,6 +23,7 @@ func NewDisBot(cfg config.Config) (*DisBot, error) {
 		mpMap:        map[string]*musicplayer.MusicPlayerStream{},
 		mx:           &sync.Mutex{},
 		msgCreateFns: map[ActionType]discrodMsgCreateFn{},
+		r:            r,
 	}
 	disBot.insertMsgCreateFn(WASSAP, disBot.wassup)
 	disBot.insertMsgCreateFn(AIR_HORN, disBot.airHorn)
@@ -50,7 +52,7 @@ func (db *DisBot) GetMusicPlayer(guildID, channelID string) (*musicplayer.MusicP
 		return mps, nil
 	}
 
-	newMps := musicplayer.NewMusicPlayer(key)
+	newMps := musicplayer.NewMusicPlayer(key, db.r)
 	if err := newMps.JoinVC(db.session, guildID, channelID); err != nil {
 		return nil, err
 	}

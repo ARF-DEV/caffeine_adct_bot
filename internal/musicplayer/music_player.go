@@ -2,7 +2,9 @@ package musicplayer
 
 import (
 	"bufio"
+	"context"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -15,6 +17,7 @@ import (
 	"github.com/ARF-DEV/caffeine_adct_bot/utils/ytutils"
 	"github.com/bwmarrin/discordgo"
 	"github.com/hraban/opus"
+	"github.com/redis/go-redis/v9"
 )
 
 // TODO: handle multiple musicplayer for multiple channel and guild (not yet tested)
@@ -46,9 +49,10 @@ type MusicPlayerStream struct {
 	pause          bool
 	queueBehaviour PlayType
 	ID             string
+	r              *redis.Client // to be change
 }
 
-func NewMusicPlayer(id string) *MusicPlayerStream {
+func NewMusicPlayer(id string, r *redis.Client) *MusicPlayerStream {
 	mps := MusicPlayerStream{
 		queue:          []audio.AudioData{},
 		playIdx:        0,
@@ -60,6 +64,7 @@ func NewMusicPlayer(id string) *MusicPlayerStream {
 		switchSoundReq: make(chan int),
 		queueBehaviour: playLoop,
 		ID:             id,
+		r:              r,
 	}
 
 	return &mps
@@ -176,82 +181,100 @@ func (mps *MusicPlayerStream) AddByURL(url string) {
 	}
 	newAudio := audio.Create(meta.Title, meta.ID, audio.OpusSound{})
 
-	ytDlp := exec.Command("yt-dlp", "-x", "-o", "-", fmt.Sprint(url))
-	ytDlpOut, err := ytDlp.StdoutPipe()
-	if err != nil {
-		panic(err)
-	}
-	ytDlpErr, err := ytDlp.StderrPipe()
-	if err != nil {
-		panic(err)
-	}
+	nFound, _ := mps.r.Exists(context.Background(), newAudio.GenRedisKey()).Result()
+	fmt.Println("nFound: ", nFound)
 
-	ffmpeg := exec.Command("ffmpeg", "-v", "debug", "-i", "pipe:0", "-f", "s16le", "-ar", "48000", "pipe:1")
-	ffmpegIn, err := ffmpeg.StdinPipe()
-	if err != nil {
-		panic(err)
-	}
-
-	ffmpegOut, err := ffmpeg.StdoutPipe()
-	if err != nil {
-		panic(err)
-	}
-	defer ffmpegOut.Close()
-
-	if err = ffmpeg.Start(); err != nil {
-		panic(err)
-	}
-
-	if err = ytDlp.Start(); err != nil {
-		panic(err)
-	}
-
-	go func() {
-		defer ffmpegIn.Close()
-		defer ytDlpOut.Close()
-		defer ytDlpErr.Close()
-		io.Copy(ffmpegIn, ytDlpOut)
-	}()
-
-	go func() {
-		io.Copy(os.Stdout, ytDlpErr)
-	}()
-
-	opusEncoder, err := opus.NewEncoder(audioFrameRate, audioChannels, opus.AppAudio)
-	if err != nil {
-		panic(err)
-	}
-
-	r := bufio.NewReaderSize(ffmpegOut, 16000)
-	buf := make([]int16, audioChannels*audioFrameSize)
-	i := 0
-	for {
-		err = binary.Read(r, binary.LittleEndian, buf)
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			if err == io.ErrUnexpectedEOF {
-				break
-			}
+	results, _ := mps.r.Get(context.Background(), newAudio.GenRedisKey()).Bytes()
+	// fmt.Println(results)
+	if len(results) > 0 {
+		fmt.Println("apwkdaowdwk")
+		if err := json.Unmarshal([]byte(results), &newAudio.Frames); err != nil {
 			panic(err)
 		}
-		opus := make([]byte, 1000)
-		n, err := opusEncoder.Encode(buf, opus)
+	} else {
+
+		fmt.Println("no-cache")
+		ytDlp := exec.Command("yt-dlp", "-x", "-o", "-", fmt.Sprint(url))
+		ytDlpOut, err := ytDlp.StdoutPipe()
 		if err != nil {
 			panic(err)
 		}
-		newAudio.Frames = append(newAudio.Frames, opus[:n])
-		i++
+		ytDlpErr, err := ytDlp.StderrPipe()
+		if err != nil {
+			panic(err)
+		}
+
+		ffmpeg := exec.Command("ffmpeg", "-v", "debug", "-i", "pipe:0", "-f", "s16le", "-ar", "48000", "pipe:1")
+		ffmpegIn, err := ffmpeg.StdinPipe()
+		if err != nil {
+			panic(err)
+		}
+
+		ffmpegOut, err := ffmpeg.StdoutPipe()
+		if err != nil {
+			panic(err)
+		}
+		defer ffmpegOut.Close()
+
+		if err = ffmpeg.Start(); err != nil {
+			panic(err)
+		}
+
+		if err = ytDlp.Start(); err != nil {
+			panic(err)
+		}
+
+		go func() {
+			defer ffmpegIn.Close()
+			defer ytDlpOut.Close()
+			defer ytDlpErr.Close()
+			io.Copy(ffmpegIn, ytDlpOut)
+		}()
+
+		go func() {
+			io.Copy(os.Stdout, ytDlpErr)
+		}()
+
+		opusEncoder, err := opus.NewEncoder(audioFrameRate, audioChannels, opus.AppAudio)
+		if err != nil {
+			panic(err)
+		}
+
+		r := bufio.NewReaderSize(ffmpegOut, 16000)
+		buf := make([]int16, audioChannels*audioFrameSize)
+		i := 0
+		for {
+			err = binary.Read(r, binary.LittleEndian, buf)
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+				if err == io.ErrUnexpectedEOF {
+					break
+				}
+				panic(err)
+			}
+			opus := make([]byte, 1000)
+			n, err := opusEncoder.Encode(buf, opus)
+			if err != nil {
+				panic(err)
+			}
+			newAudio.Frames = append(newAudio.Frames, opus[:n])
+			i++
+		}
+
+		if err = mps.r.Set(context.Background(), newAudio.GenRedisKey(), newAudio.Frames, 10*time.Minute).Err(); err != nil {
+			panic(err)
+		}
+		if err = ytDlp.Wait(); err != nil {
+			log.Printf("yt-dlp command finished with error: %v", err)
+		}
+		if err = ffmpeg.Wait(); err != nil {
+			log.Printf("yt-dlp command finished with error: %v", err)
+		}
 	}
+
 	mps.queueAddChan <- newAudio
-	if err = ytDlp.Wait(); err != nil {
-		log.Printf("yt-dlp command finished with error: %v", err)
-	}
-	if err = ffmpeg.Wait(); err != nil {
-		log.Printf("yt-dlp command finished with error: %v", err)
-	}
-
 }
 
 func (mps *MusicPlayerStream) PlayAirHorn() {
