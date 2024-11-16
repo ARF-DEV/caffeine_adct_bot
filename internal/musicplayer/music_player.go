@@ -62,8 +62,6 @@ func NewMusicPlayer(id string) *MusicPlayerStream {
 		ID:             id,
 	}
 
-	go mps.addToQueueProcess()
-	go mps.runplayer()
 	return &mps
 }
 func (mps MusicPlayerStream) String() string {
@@ -71,6 +69,11 @@ func (mps MusicPlayerStream) String() string {
 }
 func (mps *MusicPlayerStream) Pause() {
 	mps.pause = !mps.pause
+}
+
+func (mps *MusicPlayerStream) Init() {
+	go mps.addToQueueProcess()
+	go mps.runplayer()
 }
 
 func (mps *MusicPlayerStream) JoinVC(s *discordgo.Session, guildID, channelID string) error {
@@ -241,7 +244,6 @@ func (mps *MusicPlayerStream) AddByURL(url string) {
 		newAudio.Frames = append(newAudio.Frames, opus[:n])
 		i++
 	}
-	fmt.Println("aokwdwao")
 	mps.queueAddChan <- newAudio
 	if err = ytDlp.Wait(); err != nil {
 		log.Printf("yt-dlp command finished with error: %v", err)

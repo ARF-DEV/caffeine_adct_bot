@@ -55,6 +55,7 @@ func (db *DisBot) GetMusicPlayer(guildID, channelID string) (*musicplayer.MusicP
 		return nil, err
 	}
 
+	newMps.Init()
 	db.mpMap[key] = newMps
 
 	return newMps, nil

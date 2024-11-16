@@ -34,7 +34,6 @@ func (ad *AudioData) PlaySoundToVC(vc *discordgo.VoiceConnection, pause *bool) {
 	var err error
 
 	defer func() {
-		fmt.Println("poawkdaowkd ", ad.Title)
 		ad.finish <- err
 	}()
 
