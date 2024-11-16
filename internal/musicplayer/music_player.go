@@ -34,35 +34,41 @@ const (
 )
 
 type MusicPlayerStream struct {
-	queue             []audio.AudioData
-	playIdx           int
-	nextPlayIdx       int
-	switchSoundReq    chan int
-	mx                *sync.Mutex
-	queueAddChan      chan audio.AudioData
-	stop              <-chan struct{}
-	vc                *discordgo.VoiceConnection
-	pause             bool
-	runInitiated      bool
-	addQueueInitiated bool
-	queueBehaviour    PlayType
+	queue          []audio.AudioData
+	playIdx        int
+	nextPlayIdx    int
+	switchSoundReq chan int
+	mx             *sync.Mutex
+	queueAddChan   chan audio.AudioData
+	stop           chan struct{}
+	play           chan struct{}
+	vc             *discordgo.VoiceConnection
+	pause          bool
+	queueBehaviour PlayType
+	ID             string
 }
 
-func NewMusicPlayer() MusicPlayerStream {
-	msp := MusicPlayerStream{
+func NewMusicPlayer(id string) *MusicPlayerStream {
+	mps := MusicPlayerStream{
 		queue:          []audio.AudioData{},
 		playIdx:        0,
 		nextPlayIdx:    0,
 		mx:             &sync.Mutex{},
 		stop:           make(chan struct{}),
+		play:           make(chan struct{}),
 		queueAddChan:   make(chan audio.AudioData),
 		switchSoundReq: make(chan int),
 		queueBehaviour: playLoop,
+		ID:             id,
 	}
 
-	return msp
+	go mps.addToQueueProcess()
+	go mps.runplayer()
+	return &mps
 }
-
+func (mps MusicPlayerStream) String() string {
+	return fmt.Sprintf("%s, %s, %d, %d, %v", mps.queue, mps.ID, mps.playIdx, mps.nextPlayIdx, mps.vc)
+}
 func (mps *MusicPlayerStream) Pause() {
 	mps.pause = !mps.pause
 }
@@ -77,29 +83,20 @@ func (mps *MusicPlayerStream) JoinVC(s *discordgo.Session, guildID, channelID st
 }
 
 func (mps *MusicPlayerStream) Run() {
-	if !mps.runInitiated {
-		go mps.run()
-		mps.runInitiated = true
-	}
-	if !mps.addQueueInitiated {
-		go mps.addToQueueProcess()
-		mps.addQueueInitiated = true
-	}
-}
-
-func (mps *MusicPlayerStream) InitQueue() {
-	if !mps.addQueueInitiated {
-		go mps.addToQueueProcess()
-		mps.addQueueInitiated = true
-	}
+	mps.play <- struct{}{}
 }
 
 func (mps *MusicPlayerStream) SwitchSound(idx int) {
 	mps.switchSoundReq <- idx
 }
-func (mps *MusicPlayerStream) run() {
+func (mps *MusicPlayerStream) runplayer() {
+	<-mps.play
+
+	mps.mx.Lock()
 	curMusic := mps.queue[mps.playIdx]
+	mps.mx.Unlock()
 	mps.nextPlayIdx++
+
 	go curMusic.PlaySoundToVC(mps.vc, &mps.pause)
 
 	defer close(mps.switchSoundReq)
@@ -140,16 +137,16 @@ func (mps *MusicPlayerStream) run() {
 
 func (mps *MusicPlayerStream) addToQueueProcess() {
 	defer close(mps.queueAddChan)
-	for {
+	for newSound := range mps.queueAddChan {
+
+		mps.mx.Lock()
+		mps.queue = append(mps.queue, newSound)
+		mps.mx.Unlock()
+
 		select {
-		case newSounds := <-mps.queueAddChan:
-			mps.mx.Lock()
-			mps.queue = append(mps.queue, newSounds)
-			mps.mx.Unlock()
 		case <-mps.stop:
 			return
 		default:
-			continue
 		}
 	}
 }
@@ -244,7 +241,7 @@ func (mps *MusicPlayerStream) AddByURL(url string) {
 		newAudio.Frames = append(newAudio.Frames, opus[:n])
 		i++
 	}
-
+	fmt.Println("aokwdwao")
 	mps.queueAddChan <- newAudio
 	if err = ytDlp.Wait(); err != nil {
 		log.Printf("yt-dlp command finished with error: %v", err)
