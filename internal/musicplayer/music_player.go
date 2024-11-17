@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/binary"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -14,10 +13,11 @@ import (
 	"time"
 
 	"github.com/ARF-DEV/caffeine_adct_bot/internal/audio"
+	"github.com/ARF-DEV/caffeine_adct_bot/internal/cache"
+	"github.com/ARF-DEV/caffeine_adct_bot/utils"
 	"github.com/ARF-DEV/caffeine_adct_bot/utils/ytutils"
 	"github.com/bwmarrin/discordgo"
 	"github.com/hraban/opus"
-	"github.com/redis/go-redis/v9"
 )
 
 // TODO: handle multiple musicplayer for multiple channel and guild (not yet tested)
@@ -49,10 +49,10 @@ type MusicPlayerStream struct {
 	pause          bool
 	queueBehaviour PlayType
 	ID             string
-	r              *redis.Client // to be change
+	r              cache.Cache // to be change
 }
 
-func NewMusicPlayer(id string, r *redis.Client) *MusicPlayerStream {
+func NewMusicPlayer(id string, r cache.Cache) *MusicPlayerStream {
 	mps := MusicPlayerStream{
 		queue:          []audio.AudioData{},
 		playIdx:        0,
@@ -170,30 +170,22 @@ func (mps *MusicPlayerStream) GetQueueList() ([]string, int) {
 }
 
 func (mps *MusicPlayerStream) AddByURL(url string) {
-	meta, err := ytutils.GetMetaData(url)
-	if err != nil {
-		panic(err)
-	}
+	ID := utils.GetTYVidIDFromURL(url)
+	newAudio := audio.Create("", ID, audio.OpusSound{})
 
-	if meta.Type == "playlist" {
-		log.Printf("ALERT: user try to download a playlist! %s", url)
-		return
-	}
-	newAudio := audio.Create(meta.Title, meta.ID, audio.OpusSound{})
-
-	nFound, _ := mps.r.Exists(context.Background(), newAudio.GenRedisKey()).Result()
-	fmt.Println("nFound: ", nFound)
-
-	results, _ := mps.r.Get(context.Background(), newAudio.GenRedisKey()).Bytes()
-	// fmt.Println(results)
-	if len(results) > 0 {
-		fmt.Println("apwkdaowdwk")
-		if err := json.Unmarshal([]byte(results), &newAudio.Frames); err != nil {
+	if err := mps.r.GetAndParse(context.Background(), newAudio.GenRedisKey(), &newAudio); err != nil {
+		log.Printf("no-cache detected for %s, downloading...", ID)
+		meta, err := ytutils.GetMetaData(url)
+		if err != nil {
 			panic(err)
 		}
-	} else {
 
-		fmt.Println("no-cache")
+		newAudio.Title = meta.Title
+		if meta.Type == "playlist" {
+			log.Printf("ALERT: user try to download a playlist! %s", url)
+			return
+		}
+
 		ytDlp := exec.Command("yt-dlp", "-x", "-o", "-", fmt.Sprint(url))
 		ytDlpOut, err := ytDlp.StdoutPipe()
 		if err != nil {
@@ -263,7 +255,7 @@ func (mps *MusicPlayerStream) AddByURL(url string) {
 			i++
 		}
 
-		if err = mps.r.Set(context.Background(), newAudio.GenRedisKey(), newAudio.Frames, 10*time.Minute).Err(); err != nil {
+		if err = mps.r.SetExp(context.Background(), newAudio.GenRedisKey(), newAudio, 10*time.Minute); err != nil {
 			panic(err)
 		}
 		if err = ytDlp.Wait(); err != nil {
@@ -272,8 +264,9 @@ func (mps *MusicPlayerStream) AddByURL(url string) {
 		if err = ffmpeg.Wait(); err != nil {
 			log.Printf("yt-dlp command finished with error: %v", err)
 		}
+	} else {
+		log.Println("cache for %s detected: adding music from cache", ID)
 	}
-
 	mps.queueAddChan <- newAudio
 }
 

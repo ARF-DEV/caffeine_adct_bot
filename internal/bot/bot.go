@@ -8,12 +8,12 @@ import (
 	"sync"
 
 	"github.com/ARF-DEV/caffeine_adct_bot/config"
+	"github.com/ARF-DEV/caffeine_adct_bot/internal/cache"
 	"github.com/ARF-DEV/caffeine_adct_bot/internal/musicplayer"
 	"github.com/bwmarrin/discordgo"
-	"github.com/redis/go-redis/v9"
 )
 
-func NewDisBot(cfg config.Config, r *redis.Client) (*DisBot, error) {
+func NewDisBot(cfg config.Config, r cache.Cache) (*DisBot, error) {
 	b, err := discordgo.New("Bot " + cfg.DiscordAppKey)
 	if err != nil {
 		return nil, err

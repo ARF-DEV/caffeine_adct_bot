@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/ARF-DEV/caffeine_adct_bot/config"
 	"github.com/ARF-DEV/caffeine_adct_bot/internal/bot"
+	"github.com/ARF-DEV/caffeine_adct_bot/internal/cache/rediscache"
 	"github.com/bwmarrin/discordgo"
 	"github.com/hraban/opus"
 	"github.com/redis/go-redis/v9"
@@ -30,13 +30,12 @@ const (
 
 func main() {
 
-	r := redis.NewClient(&redis.Options{
+	r := rediscache.CreateCache(&redis.Options{
 		Addr:     "localhost:6379",
 		DB:       0,
 		Password: "",
 		Protocol: 3,
 	})
-	fmt.Println(r.Ping(context.Background()))
 
 	config, err := config.Load("./config.json")
 	if err != nil {

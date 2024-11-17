@@ -64,7 +64,10 @@ breakLoop:
 }
 
 func (ad AudioData) GenRedisKey() string {
-	return fmt.Sprintf("%s:%s", ad.ID, ad.Title)
+	return ad.ID
+}
+func (ad AudioData) MarshalBinary() ([]byte, error) {
+	return json.Marshal(ad)
 }
 
 func Create(Title, ID string, Frames OpusSound) AudioData {
