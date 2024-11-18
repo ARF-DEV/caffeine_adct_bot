@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -13,8 +14,10 @@ import (
 
 	"github.com/ARF-DEV/caffeine_adct_bot/config"
 	"github.com/ARF-DEV/caffeine_adct_bot/internal/bot"
+	"github.com/ARF-DEV/caffeine_adct_bot/internal/cache/rediscache"
 	"github.com/bwmarrin/discordgo"
 	"github.com/hraban/opus"
+	"github.com/redis/go-redis/v9"
 )
 
 const (
@@ -27,12 +30,23 @@ const (
 )
 
 func main() {
+	r := rediscache.CreateCache(&redis.Options{
+		Addr:     "localhost:6379",
+		DB:       0,
+		Password: "",
+		Protocol: 3,
+	})
+
+	if err := r.Ping(context.Background()); err != nil {
+		panic(err)
+	}
+
 	config, err := config.Load("./config.json")
 	if err != nil {
 		panic(err)
 	}
 
-	bot, err := bot.NewDisBot(config)
+	bot, err := bot.NewDisBot(config, r)
 	if err != nil {
 		panic(err)
 	}

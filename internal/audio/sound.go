@@ -2,6 +2,7 @@ package audio
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -48,7 +49,6 @@ func (ad *AudioData) PlaySoundToVC(vc *discordgo.VoiceConnection, pause *bool) {
 		}
 		select {
 		case <-ad.finish:
-			fmt.Println("goottt ittt")
 			goto breakLoop
 		default:
 			vc.OpusSend <- audioData
@@ -61,6 +61,13 @@ breakLoop:
 		return
 	}
 
+}
+
+func (ad AudioData) GenRedisKey() string {
+	return ad.ID
+}
+func (ad AudioData) MarshalBinary() ([]byte, error) {
+	return json.Marshal(ad)
 }
 
 func Create(Title, ID string, Frames OpusSound) AudioData {
@@ -119,4 +126,8 @@ func (opus OpusSound) PlaySound(vc *discordgo.VoiceConnection) error {
 
 func (opus OpusSound) String() string {
 	return fmt.Sprintf("opos_sound_len: %d", len(opus))
+}
+
+func (opus OpusSound) MarshalBinary() ([]byte, error) {
+	return json.Marshal(opus)
 }

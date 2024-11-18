@@ -8,11 +8,12 @@ import (
 	"sync"
 
 	"github.com/ARF-DEV/caffeine_adct_bot/config"
+	"github.com/ARF-DEV/caffeine_adct_bot/internal/cache"
 	"github.com/ARF-DEV/caffeine_adct_bot/internal/musicplayer"
 	"github.com/bwmarrin/discordgo"
 )
 
-func NewDisBot(cfg config.Config) (*DisBot, error) {
+func NewDisBot(cfg config.Config, r cache.Cache) (*DisBot, error) {
 	b, err := discordgo.New("Bot " + cfg.DiscordAppKey)
 	if err != nil {
 		return nil, err
@@ -22,6 +23,7 @@ func NewDisBot(cfg config.Config) (*DisBot, error) {
 		mpMap:        map[string]*musicplayer.MusicPlayerStream{},
 		mx:           &sync.Mutex{},
 		msgCreateFns: map[ActionType]discrodMsgCreateFn{},
+		r:            r,
 	}
 	disBot.insertMsgCreateFn(WASSAP, disBot.wassup)
 	disBot.insertMsgCreateFn(AIR_HORN, disBot.airHorn)
@@ -50,7 +52,7 @@ func (db *DisBot) GetMusicPlayer(guildID, channelID string) (*musicplayer.MusicP
 		return mps, nil
 	}
 
-	newMps := musicplayer.NewMusicPlayer(key)
+	newMps := musicplayer.NewMusicPlayer(key, db.r)
 	if err := newMps.JoinVC(db.session, guildID, channelID); err != nil {
 		return nil, err
 	}
@@ -113,11 +115,15 @@ func (db *DisBot) printList(msg *discordgo.MessageCreate) {
 	}
 	queueList, playedIdx := msp.GetQueueList()
 	messageContent := ""
-	for i, title := range queueList {
-		messageContent += fmt.Sprintf("%d. %s\n", i+1, title)
-	}
+	if len(queueList) == 0 {
+		messageContent = "playlist is empty!"
+	} else {
+		for i, title := range queueList {
+			messageContent += fmt.Sprintf("%d. %s\n", i+1, title)
+		}
 
-	messageContent += fmt.Sprintf("\nCurrently playing: %d. %s", playedIdx+1, queueList[playedIdx])
+		messageContent += fmt.Sprintf("\nCurrently playing: %d. %s", playedIdx+1, queueList[playedIdx])
+	}
 	db.session.ChannelMessageSendComplex(msg.ChannelID, &discordgo.MessageSend{
 		Content: messageContent,
 		AllowedMentions: &discordgo.MessageAllowedMentions{
@@ -133,7 +139,15 @@ func (db *DisBot) play(msg *discordgo.MessageCreate) {
 		db.storeError(fmt.Sprintf("Error on DisBot.GetMusicPlayer(): %v", err))
 		return
 	}
-	msp.Run()
+	err = msp.Run()
+	if err != nil {
+		db.session.ChannelMessageSendComplex(msg.ChannelID, &discordgo.MessageSend{
+			Content: err.Error(),
+			AllowedMentions: &discordgo.MessageAllowedMentions{
+				Parse: []discordgo.AllowedMentionType{discordgo.AllowedMentionTypeUsers},
+			},
+		})
+	}
 }
 
 func (db *DisBot) switchMusic(msg *discordgo.MessageCreate) {

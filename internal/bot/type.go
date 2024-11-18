@@ -3,6 +3,7 @@ package bot
 import (
 	"sync"
 
+	"github.com/ARF-DEV/caffeine_adct_bot/internal/cache"
 	"github.com/ARF-DEV/caffeine_adct_bot/internal/musicplayer"
 	"github.com/bwmarrin/discordgo"
 )
@@ -14,6 +15,7 @@ type (
 		mx           *sync.Mutex
 		msgCreateFns map[ActionType]discrodMsgCreateFn
 		errors       []string
+		r            cache.Cache
 	}
 
 	discrodMsgCreateFn func(*discordgo.MessageCreate)
