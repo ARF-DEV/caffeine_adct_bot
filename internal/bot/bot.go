@@ -115,11 +115,15 @@ func (db *DisBot) printList(msg *discordgo.MessageCreate) {
 	}
 	queueList, playedIdx := msp.GetQueueList()
 	messageContent := ""
-	for i, title := range queueList {
-		messageContent += fmt.Sprintf("%d. %s\n", i+1, title)
-	}
+	if len(queueList) == 0 {
+		messageContent = "playlist is empty!"
+	} else {
+		for i, title := range queueList {
+			messageContent += fmt.Sprintf("%d. %s\n", i+1, title)
+		}
 
-	messageContent += fmt.Sprintf("\nCurrently playing: %d. %s", playedIdx+1, queueList[playedIdx])
+		messageContent += fmt.Sprintf("\nCurrently playing: %d. %s", playedIdx+1, queueList[playedIdx])
+	}
 	db.session.ChannelMessageSendComplex(msg.ChannelID, &discordgo.MessageSend{
 		Content: messageContent,
 		AllowedMentions: &discordgo.MessageAllowedMentions{
@@ -135,7 +139,15 @@ func (db *DisBot) play(msg *discordgo.MessageCreate) {
 		db.storeError(fmt.Sprintf("Error on DisBot.GetMusicPlayer(): %v", err))
 		return
 	}
-	msp.Run()
+	err = msp.Run()
+	if err != nil {
+		db.session.ChannelMessageSendComplex(msg.ChannelID, &discordgo.MessageSend{
+			Content: err.Error(),
+			AllowedMentions: &discordgo.MessageAllowedMentions{
+				Parse: []discordgo.AllowedMentionType{discordgo.AllowedMentionTypeUsers},
+			},
+		})
+	}
 }
 
 func (db *DisBot) switchMusic(msg *discordgo.MessageCreate) {

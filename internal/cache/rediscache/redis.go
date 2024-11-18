@@ -23,6 +23,19 @@ func CreateCache(opt *redis.Options) cache.Cache {
 	return &cache
 }
 
+func (rc *RedisCache) Ping(ctx context.Context) error {
+	if err := rc.SetExp(ctx, "ping", "ping", 1*time.Minute); err != nil {
+		return err
+	}
+
+	s := ""
+	if err := rc.GetAndParse(ctx, "ping", &s); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (rc *RedisCache) GetAndParse(ctx context.Context, key string, dst interface{}) error {
 	res, err := rc.client.Get(ctx, key).Bytes()
 	if err != nil {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -29,13 +30,16 @@ const (
 )
 
 func main() {
-
 	r := rediscache.CreateCache(&redis.Options{
 		Addr:     "localhost:6379",
 		DB:       0,
 		Password: "",
 		Protocol: 3,
 	})
+
+	if err := r.Ping(context.Background()); err != nil {
+		panic(err)
+	}
 
 	config, err := config.Load("./config.json")
 	if err != nil {

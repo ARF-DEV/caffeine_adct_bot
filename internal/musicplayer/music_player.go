@@ -90,8 +90,14 @@ func (mps *MusicPlayerStream) JoinVC(s *discordgo.Session, guildID, channelID st
 	return nil
 }
 
-func (mps *MusicPlayerStream) Run() {
+func (mps *MusicPlayerStream) Run() error {
+	if len(mps.queue) == 0 {
+		return fmt.Errorf("playlist is empty")
+	}
+
 	mps.play <- struct{}{}
+	return nil
+
 }
 
 func (mps *MusicPlayerStream) SwitchSound(idx int) {
