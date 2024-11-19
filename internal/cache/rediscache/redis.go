@@ -53,7 +53,6 @@ func (rc *RedisCache) GetAndParse(ctx context.Context, key string, dst interface
 }
 
 func (rc *RedisCache) Set(ctx context.Context, key string, value interface{}) error {
-
 	return rc.SetExp(ctx, key, value, 0)
 }
 

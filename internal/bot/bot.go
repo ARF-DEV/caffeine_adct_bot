@@ -137,6 +137,7 @@ func (db *DisBot) play(msg *discordgo.MessageCreate) {
 	msp, err := db.GetMusicPlayer(msg.GuildID, msg.ChannelID)
 	if err != nil {
 		db.storeError(fmt.Sprintf("Error on DisBot.GetMusicPlayer(): %v", err))
+
 		return
 	}
 	err = msp.Run()
@@ -248,5 +249,6 @@ func (db *DisBot) init() {
 }
 
 func (db *DisBot) storeError(err string) {
+	log.Println(err)
 	db.errors = append(db.errors, err)
 }

@@ -20,7 +20,7 @@ import (
 	"github.com/hraban/opus"
 )
 
-// TODO: handle multiple musicplayer for multiple channel and guild (not yet tested)
+// handle multiple musicplayer for multiple channel and guild (not yet tested)
 const (
 	audioChannels  = 2
 	audioFrameRate = 48000
@@ -271,7 +271,7 @@ func (mps *MusicPlayerStream) AddByURL(url string) {
 			log.Printf("yt-dlp command finished with error: %v", err)
 		}
 	} else {
-		log.Println("cache for %s detected: adding music from cache", ID)
+		log.Printf("cache for %s detected: adding music from cache", ID)
 	}
 	mps.queueAddChan <- newAudio
 }
