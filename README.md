@@ -1,7 +1,7 @@
 # Caffeine Adct Discord Bot
 
 this a music player discord bot, features currently implemented are:
-- add music from youtube
+- add music from youtube, and other website supported by yt-dlp [here](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md)
 - playlist queue
 - pause / switch currently playing music
 
