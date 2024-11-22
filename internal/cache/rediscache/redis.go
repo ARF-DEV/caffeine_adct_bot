@@ -45,8 +45,13 @@ func (rc *RedisCache) GetAndParse(ctx context.Context, key string, dst interface
 	if len(res) == 0 {
 		return fmt.Errorf("redis key (%s)'s value len is 0", key)
 	}
-	if err = json.Unmarshal(res, dst); err != nil {
-		return err
+	switch dst.(type) {
+	case *string, []byte:
+		dst = res
+	default:
+		if err = json.Unmarshal(res, dst); err != nil {
+			return err
+		}
 	}
 
 	return nil
