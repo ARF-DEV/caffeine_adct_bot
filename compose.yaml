@@ -1,0 +1,15 @@
+services:
+  bot:
+    build: .
+    depends_on:
+      redis:
+        condition: service_started
+    networks:
+      - backend
+    # ports
+  redis:
+    image: redis
+    networks:
+      - backend
+networks:
+  backend:

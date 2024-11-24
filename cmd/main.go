@@ -31,7 +31,7 @@ const (
 
 func main() {
 	r := rediscache.CreateCache(&redis.Options{
-		Addr:     "localhost:6379",
+		Addr:     "redis:6379",
 		DB:       0,
 		Password: "",
 		Protocol: 3,
