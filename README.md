@@ -6,6 +6,6 @@ this a music player discord bot, features currently implemented are:
 - pause / switch currently playing music
 
 ## requirement:
-this bot required yt-dlp and ffmpeg to be installed on your machine to be used
+this bot required yt-dlp and ffmpeg to be installed on your machine
 
 note: this bot currently developed for personal use
