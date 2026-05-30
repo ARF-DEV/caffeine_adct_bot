@@ -30,25 +30,26 @@ const (
 )
 
 func main() {
+
+	config, err := config.Load("./config.json")
+	if err != nil {
+		log.Print(err)
+	}
+
 	r := rediscache.CreateCache(&redis.Options{
-		Addr:     "redis:6379",
+		Addr:     config.RedisUrl,
 		DB:       0,
 		Password: "",
 		Protocol: 3,
 	})
 
 	if err := r.Ping(context.Background()); err != nil {
-		panic(err)
-	}
-
-	config, err := config.Load("./config.json")
-	if err != nil {
-		panic(err)
+		log.Print(err)
 	}
 
 	bot, err := bot.NewDisBot(config, r)
 	if err != nil {
-		panic(err)
+		log.Print(err)
 	}
 	bot.Open()
 	defer bot.Close()

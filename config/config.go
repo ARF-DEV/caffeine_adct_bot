@@ -8,10 +8,11 @@ import (
 
 type Config struct {
 	DiscordAppKey string `json:"discord_app_key"`
+	RedisUrl      string `json:"redis_url"`
 }
 
 func Load(path string) (Config, error) {
-	file, err := os.Open(".config.json")
+	file, err := os.Open(path)
 	if err != nil {
 		return Config{}, err
 	}

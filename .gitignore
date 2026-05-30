@@ -1,2 +1,6 @@
 .*
 !.gitignore
+config.json
+
+.ignore
+task.md
